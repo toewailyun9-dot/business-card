@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String     @id @default(cuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  customers    Customer[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+}
+
+model Customer {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name        String
+  photo       String?
+  jobTitle    String?
+  company     String?
+  phone       String
+  email       String?
+  address     String?
+  mapUrl      String?
+  website     String?
+  bio         String?
+  status      String       @default("ACTIVE")
+  socialLinks SocialLink[]
+  qrCard      QrCard?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+}
+
+model SocialLink {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  platform   String
+  url        String
+}
+
+enum CardTemplate {
+  PROFESSIONAL
+  LUXURY
+  CLASSIC
+  CREATOR
+  FRIENDLY
+}
+
+model QrCard {
+  id         String       @id @default(cuid())
+  customerId String       @unique
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  slug       String       @unique
+  status     String       @default("ACTIVE")
+  template   CardTemplate @default(PROFESSIONAL)
+  scans      Scan[]
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+}
+
+model Scan {
+  id        String   @id @default(cuid())
+  qrCardId  String
+  qrCard    QrCard   @relation(fields: [qrCardId], references: [id], onDelete: Cascade)
+  scannedAt DateTime @default(now())
+  userAgent String?
+}
