@@ -152,11 +152,27 @@ export function CustomerForm({ initialData, isEditing = false }: CustomerFormPro
       if (data.success && data.url) {
         setFormData((prev) => ({ ...prev, photo: data.url }));
       } else {
-        setUploadError(data.error || "Failed to upload image");
+        // Fallback to client-side data URL if server upload fails (e.g. read-only filesystem)
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const result = ev.target?.result as string;
+          if (result) {
+            setFormData((prev) => ({ ...prev, photo: result }));
+          }
+        };
+        reader.readAsDataURL(file);
       }
     } catch (err: unknown) {
-      console.error("Upload error:", err);
-      setUploadError("Failed to upload image. Please try again.");
+      console.warn("Upload endpoint unreachable, using client data URL:", err);
+      // Fallback to client-side data URL
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const result = ev.target?.result as string;
+        if (result) {
+          setFormData((prev) => ({ ...prev, photo: result }));
+        }
+      };
+      reader.readAsDataURL(file);
     } finally {
       setUploading(false);
       if (fileInputRef.current) {

@@ -35,23 +35,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Ensure uploads directory exists
-    const uploadsDir = path.join(process.cwd(), "public", "uploads");
-    await fs.mkdir(uploadsDir, { recursive: true });
-
-    // Generate clean unique filename
-    const ext = path.extname(file.name) || ".jpg";
-    const baseName = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
-    const uniqueFileName = `${Date.now()}-${baseName}${ext}`;
-    const filePath = path.join(uploadsDir, uniqueFileName);
-
     // Save file buffer
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
-    await fs.writeFile(filePath, buffer);
 
-    const publicUrl = `/uploads/${uniqueFileName}`;
-    return NextResponse.json({ success: true, url: publicUrl });
+    // Try saving to disk (works on local dev & VPS)
+    try {
+      const uploadsDir = path.join(process.cwd(), "public", "uploads");
+      await fs.mkdir(uploadsDir, { recursive: true });
+
+      const ext = path.extname(file.name) || ".jpg";
+      const baseName = path.basename(file.name, ext).replace(/[^a-zA-Z0-9_-]/g, "_");
+      const uniqueFileName = `${Date.now()}-${baseName}${ext}`;
+      const filePath = path.join(uploadsDir, uniqueFileName);
+
+      await fs.writeFile(filePath, buffer);
+      const publicUrl = `/uploads/${uniqueFileName}`;
+      return NextResponse.json({ success: true, url: publicUrl });
+    } catch (fsErr) {
+      // In Serverless environments (like Vercel) where the filesystem is read-only (EROFS),
+      // seamlessly fallback to a Data URL so it is stored directly in the database.
+      console.warn("Filesystem read-only or unavailable. Using Data URL fallback:", fsErr);
+      const mime = file.type || "image/jpeg";
+      const base64 = buffer.toString("base64");
+      const dataUrl = `data:${mime};base64,${base64}`;
+      return NextResponse.json({ success: true, url: dataUrl });
+    }
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ success: false, error: "Failed to upload image file" }, { status: 500 });
