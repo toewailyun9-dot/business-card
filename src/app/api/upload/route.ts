@@ -39,7 +39,29 @@ export async function POST(request: NextRequest) {
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
 
-    // Try saving to disk (works on local dev & VPS)
+    // 1. Try Cloudinary Upload if credentials are configured
+    const cloudName =
+      process.env.CLOUDINARY_CLOUD_NAME ||
+      process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const apiKey = process.env.CLOUDINARY_API_KEY;
+    const apiSecret = process.env.CLOUDINARY_API_SECRET;
+
+    if (cloudName && apiKey && apiSecret) {
+      try {
+        const { uploadBufferToCloudinary } = await import("@/lib/cloudinary");
+        const uploadResult = await uploadBufferToCloudinary(buffer);
+        if (uploadResult?.secure_url) {
+          return NextResponse.json({
+            success: true,
+            url: uploadResult.secure_url,
+          });
+        }
+      } catch (cloudErr) {
+        console.error("Cloudinary upload failed, trying disk/fallback:", cloudErr);
+      }
+    }
+
+    // 2. Try saving to local disk (works on local dev & VPS)
     try {
       const uploadsDir = path.join(process.cwd(), "public", "uploads");
       await fs.mkdir(uploadsDir, { recursive: true });
@@ -53,9 +75,8 @@ export async function POST(request: NextRequest) {
       const publicUrl = `/uploads/${uniqueFileName}`;
       return NextResponse.json({ success: true, url: publicUrl });
     } catch (fsErr) {
-      // In Serverless environments (like Vercel) where the filesystem is read-only (EROFS),
-      // seamlessly fallback to a Data URL so it is stored directly in the database.
-      console.warn("Filesystem read-only or unavailable. Using Data URL fallback:", fsErr);
+      // 3. Fallback for read-only serverless if Cloudinary wasn't configured
+      console.warn("Filesystem read-only and Cloudinary not configured. Using Data URL fallback:", fsErr);
       const mime = file.type || "image/jpeg";
       const base64 = buffer.toString("base64");
       const dataUrl = `data:${mime};base64,${base64}`;
